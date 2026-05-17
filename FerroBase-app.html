@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FerroBase</title>
+<meta name="application-name" content="FerroBase">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FerroBase">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1614">
+<meta name="description" content="Buscador técnico ferroviario">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+:root {
+  --bg: #f5f0e8;
+  --bg2: #ede8df;
+  --surface: #ffffff;
+  --border: #d4cec4;
+  --accent: #c0392b;
+  --accent2: #e67e22;
+  --dark: #1a1614;
+  --text: #2c2825;
+  --muted: #8a8078;
+  --tag-bg: #1a1614;
+  --tag-text: #f5f0e8;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  min-height: 100vh;
+}
+
+/* Grain overlay */
+body::after {
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:999;
+  opacity:0.5;
+}
+
+header {
+  background: var(--dark);
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  color: #f5f0e8;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.logo span { color: var(--accent); }
+
+.header-meta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: #6b6560;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.doc-count-pill {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 100px;
+  padding: 5px 14px;
+  color: #a09890;
+}
+
+.doc-count-pill span { color: var(--accent2); font-weight: 500; }
+
+/* Main layout */
+.app { display: flex; min-height: calc(100vh - 70px); }
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 70px;
+  height: calc(100vh - 70px);
+  overflow-y: auto;
+}
+
+.sidebar-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
+}
+
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: #fff9f8; }
+
+.upload-icon { font-size: 28px; margin-bottom: 8px; }
+.upload-label { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.upload-label strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 13px; }
+
+.upload-btn-small {
+  margin-top: 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.upload-btn-small:hover { background: #a93226; }
+#fileInput { display: none; }
+
+/* Type filter */
+.type-filters { display: flex; flex-direction: column; gap: 6px; }
+
+.type-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 13px;
+}
+
+.type-chip:hover { background: var(--surface); border-color: var(--border); }
+.type-chip.active { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+
+.type-chip .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.type-chip .count {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Doc list in sidebar */
+.doc-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; max-height: 300px; }
+
+.doc-item-small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.doc-item-small:hover { background: var(--surface); border-color: var(--border); }
+.doc-item-small.active { background: var(--surface); border-color: var(--accent); }
+
+.doc-item-small .doc-icon { font-size: 16px; flex-shrink: 0; }
+.doc-item-small .doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.doc-item-small .remove-btn {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 2px;
+}
+.doc-item-small:hover .remove-btn { opacity: 1; }
+
+/* Main content */
+.main { flex: 1; padding: 28px 24px; min-width: 0; }
+
+/* Search */
+.search-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: stretch;
+}
+
+.search-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.search-icon-inner {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  pointer-events: none;
+  color: var(--muted);
+}
+
+#searchInput {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px 14px 48px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+#searchInput:focus { border-color: var(--accent); }
+#searchInput::placeholder { color: var(--muted); }
+
+.ai-search-btn {
+  background: var(--dark);
+  color: #f5f0e8;
+  border: none;
+  border-radius: 10px;
+  padding: 0 20px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.ai-search-btn:hover { background: #2c2825; }
+.ai-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* AI Response */
+.ai-box {
+  background: var(--dark);
+  color: #f5f0e8;
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+  display: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-box::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+
+.ai-box-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--accent2);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-box-text { font-size: 14px; line-height: 1.75; color: #ddd8d0; }
+
+/* Results grid */
+.results-meta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 14px;
+  letter-spacing: 0.05em;
+}
+
+.results-meta span { color: var(--accent); }
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+/* Result card */
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  animation: fadeUp 0.25s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 6px 24px rgba(192,57,43,0.12);
+  transform: translateY(-2px);
+}
+
+.card-preview {
+  height: 140px;
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-preview .big-icon { font-size: 48px; opacity: 0.4; }
+
+.card-preview .text-preview {
+  padding: 14px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-clamp: 6;
+  -webkit-box-orient: vertical;
+  width: 100%;
+  height: 100%;
+}
+
+.card-preview .type-badge {
+  position: absolute;
+  top: 10px; right: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.card-body { padding: 14px 16px; }
+
+.card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-snippet {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-snippet .hl { background: rgba(192,57,43,0.12); color: var(--accent); border-radius: 2px; padding: 0 2px; }
+
+.card-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-size {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.card-matches {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--accent);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,22,20,0.8);
+  z-index: 200;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 800px;
+  margin: auto;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+}
+
+.modal-header {
+  background: var(--dark);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.modal-header-icon { font-size: 24px; }
+.modal-header-info { flex: 1; min-width: 0; }
+.modal-header-name {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f5f0e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal-header-meta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: #6b6560;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.modal-close {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: #a09890;
+  border-radius: 8px;
+  width: 36px; height: 36px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.modal-close:hover { background: rgba(255,255,255,0.14); color: #f5f0e8; }
+
+.modal-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
+
+.modal-body img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+
+.modal-content-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 80px 24px;
+  color: var(--muted);
+}
+
+.empty-icon { font-size: 52px; margin-bottom: 16px; opacity: 0.5; }
+.empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 8px; }
+.empty-desc { font-size: 14px; line-height: 1.6; }
+
+/* Processing indicator */
+.processing-bar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.processing-bar.show { display: flex; }
+
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Color coding by type */
+.type-pdf { background: #fee2e2; color: #b91c1c; }
+.type-docx { background: #dbeafe; color: #1d4ed8; }
+.type-xlsx { background: #dcfce7; color: #15803d; }
+.type-img { background: #fef3c7; color: #b45309; }
+.type-txt { background: #f3f4f6; color: #374151; }
+.type-other { background: #ede9fe; color: #6d28d9; }
+
+.dot-pdf { background: #ef4444; }
+.dot-docx { background: #3b82f6; }
+.dot-xlsx { background: #22c55e; }
+.dot-img { background: #f59e0b; }
+.dot-txt { background: #9ca3af; }
+.dot-other { background: #a78bfa; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+@media (max-width: 640px) {
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: static; }
+  .results-grid { grid-template-columns: 1fr; }
+  .modal-overlay { padding: 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">Ferro<span>Base</span></div>
+    <div class="header-meta">Buscador Técnico Ferroviario</div>
+  </div>
+  <div class="doc-count-pill"><span id="headerCount">0</span> documentos cargados</div>
+</header>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <div>
+      <div class="sidebar-title">Agregar archivos</div>
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📂</div>
+        <div class="upload-label">
+          <strong>Sube tus documentos</strong>
+          PDF, Word, Excel, imágenes, TXT
+        </div>
+        <button class="upload-btn-small" onclick="document.getElementById('fileInput').click()">Seleccionar archivos</button>
+        <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp">
+      </div>
+    </div>
+
+    <div>
+      <div class="sidebar-title">Filtrar por tipo</div>
+      <div class="type-filters" id="typeFilters">
+        <div class="type-chip active" data-type="all" onclick="filterType('all', this)">
+          <div class="dot" style="background:#888"></div> Todos
+          <span class="count" id="cnt-all">0</span>
+        </div>
+        <div class="type-chip" data-type="pdf" onclick="filterType('pdf', this)">
+          <div class="dot dot-pdf"></div> PDF
+          <span class="count" id="cnt-pdf">0</span>
+        </div>
+        <div class="type-chip" data-type="docx" onclick="filterType('docx', this)">
+          <div class="dot dot-docx"></div> Word
+          <span class="count" id="cnt-docx">0</span>
+        </div>
+        <div class="type-chip" data-type="xlsx" onclick="filterType('xlsx', this)">
+          <div class="dot dot-xlsx"></div> Excel / CSV
+          <span class="count" id="cnt-xlsx">0</span>
+        </div>
+        <div class="type-chip" data-type="img" onclick="filterType('img', this)">
+          <div class="dot dot-img"></div> Imágenes
+          <span class="count" id="cnt-img">0</span>
+        </div>
+        <div class="type-chip" data-type="txt" onclick="filterType('txt', this)">
+          <div class="dot dot-txt"></div> Texto
+          <span class="count" id="cnt-txt">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1; min-height:0;">
+      <div class="sidebar-title">Archivos cargados</div>
+      <div class="doc-list" id="docList"></div>
+    </div>
+
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="search-bar">
+      <div class="search-wrap">
+        <span class="search-icon-inner">🔍</span>
+        <input type="text" id="searchInput" placeholder="Buscar en todos los documentos... (normativa, código, valor, procedimiento...)" />
+      </div>
+      <button class="ai-search-btn" id="aiBtn" onclick="askAI()">
+        ◆ IA
+      </button>
+    </div>
+
+    <div class="processing-bar" id="processingBar">
+      <div class="spinner"></div>
+      <span id="processingText">Procesando archivos...</span>
+    </div>
+
+    <div class="ai-box" id="aiBox">
+      <div class="ai-box-label">◆ Análisis IA</div>
+      <div class="ai-box-text" id="aiBoxText"></div>
+    </div>
+
+    <div id="mainContent">
+      <div class="empty">
+        <div class="empty-icon">🚆</div>
+        <div class="empty-title">Sube tus documentos para comenzar</div>
+        <div class="empty-desc">Puedes cargar PDFs, Word, Excel, imágenes y archivos de texto.<br>La búsqueda encuentra contenido en todos ellos a la vez.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="maybeCloseModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-header-icon" id="modalIcon">📄</div>
+      <div class="modal-header-info">
+        <div class="modal-header-name" id="modalName">—</div>
+        <div class="modal-header-meta" id="modalMeta">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let docs = []; // { id, name, type, size, text, dataUrl, rawData }
+let activeType = 'all';
+let searchQ = '';
+
+// --- Upload ---
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag'); processFiles([...e.dataTransfer.files]); });
+fileInput.addEventListener('change', e => { processFiles([...e.target.files]); fileInput.value=''; });
+
+function getType(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return 'pdf';
+  if (['doc','docx'].includes(ext)) return 'docx';
+  if (['xls','xlsx','csv'].includes(ext)) return 'xlsx';
+  if (['png','jpg','jpeg','gif','webp','bmp'].includes(ext)) return 'img';
+  if (['txt','md','rtf'].includes(ext)) return 'txt';
+  return 'other';
+}
+
+function getIcon(type) {
+  return { pdf:'📄', docx:'📝', xlsx:'📊', img:'🖼️', txt:'📃', other:'📁' }[type] || '📁';
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(1) + ' MB';
+}
+
+async function processFiles(files) {
+  const bar = document.getElementById('processingBar');
+  bar.classList.add('show');
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    document.getElementById('processingText').textContent = `Procesando ${i+1}/${files.length}: ${file.name}`;
+    const type = getType(file.name);
+    let text = '';
+    let dataUrl = null;
+
+    try {
+      if (type === 'pdf') {
+        text = await extractPDF(file);
+      } else if (type === 'docx') {
+        text = await extractDocx(file);
+      } else if (type === 'xlsx') {
+        text = await extractExcel(file);
+      } else if (type === 'img') {
+        dataUrl = await toDataUrl(file);
+        text = file.name;
+      } else {
+        text = await file.text();
+      }
+    } catch(e) {
+      text = '[No se pudo extraer el contenido]';
+    }
+
+    docs.push({
+      id: Date.now() + Math.random(),
+      name: file.name,
+      type,
+      size: file.size,
+      text: text || '',
+      dataUrl,
+      snippet: text.slice(0, 300)
+    });
+  }
+
+  bar.classList.remove('show');
+  updateCounts();
+  renderSidebar();
+  renderResults();
+}
+
+async function extractPDF(file) {
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(s => s.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+async function extractDocx(file) {
+  const ab = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: ab });
+  return result.value;
+}
+
+async function extractExcel(file) {
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, { type: 'array' });
+  let text = '';
+  wb.SheetNames.forEach(name => {
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    text += `[${name}]\n`;
+    rows.forEach(row => { text += row.join('\t') + '\n'; });
+    text += '\n';
+  });
+  return text;
+}
+
+function toDataUrl(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// --- UI ---
+function updateCounts() {
+  const total = docs.length;
+  document.getElementById('headerCount').textContent = total;
+  document.getElementById('cnt-all').textContent = total;
+  ['pdf','docx','xlsx','img','txt','other'].forEach(t => {
+    const el = document.getElementById('cnt-'+t);
+    if (el) el.textContent = docs.filter(d => d.type === t).length;
+  });
+}
+
+function renderSidebar() {
+  const list = document.getElementById('docList');
+  list.innerHTML = docs.map(doc => `
+    <div class="doc-item-small" onclick="openDoc('${doc.id}')">
+      <span class="doc-icon">${getIcon(doc.type)}</span>
+      <span class="doc-name" title="${doc.name}">${doc.name}</span>
+      <button class="remove-btn" onclick="removeDoc(event,'${doc.id}')">✕</button>
+    </div>`).join('');
+}
+
+function removeDoc(e, id) {
+  e.stopPropagation();
+  docs = docs.filter(d => String(d.id) !== String(id));
+  updateCounts();
+  renderSidebar();
+  renderResults();
+}
+
+function filterType(type, el) {
+  activeType = type;
+  document.querySelectorAll('.type-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderResults();
+}
+
+// --- Search & Results ---
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchQ = e.target.value.trim().toLowerCase();
+  document.getElementById('aiBox').style.display = 'none';
+  renderResults();
+});
+
+function getMatches(doc, q) {
+  if (!q) return [];
+  const text = doc.text.toLowerCase();
+  const matches = [];
+  let idx = text.indexOf(q);
+  while (idx !== -1 && matches.length < 5) {
+    matches.push(idx);
+    idx = text.indexOf(q, idx + 1);
+  }
+  return matches;
+}
+
+function getSnippet(text, q) {
+  if (!q) return text.slice(0, 120) + (text.length > 120 ? '…' : '');
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return text.slice(0, 120) + '…';
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(text.length, idx + q.length + 80);
+  const raw = (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+  return raw.replace(new RegExp(`(${escRe(q)})`, 'gi'), '<span class="hl">$1</span>');
+}
+
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function renderResults() {
+  const content = document.getElementById('mainContent');
+
+  if (docs.length === 0) {
+    content.innerHTML = `<div class="empty">
+      <div class="empty-icon">🚆</div>
+      <div class="empty-title">Sube tus documentos para comenzar</div>
+      <div class="empty-desc">PDF, Word, Excel, imágenes y texto.<br>La búsqueda encuentra contenido en todos ellos.</div>
+    </div>`;
+    return;
+  }
+
+  let filtered = docs.filter(d => activeType === 'all' || d.type === activeType);
+
+  if (searchQ) {
+    filtered = filtered
+      .map(d => ({ doc: d, matches: getMatches(d, searchQ) }))
+      .filter(({ matches }) => matches.length > 0 || d => d.doc.name.toLowerCase().includes(searchQ))
+      .sort((a, b) => b.matches.length - a.matches.length)
+      .map(({ doc }) => doc);
+
+    // fallback: also match by name
+    const byName = docs.filter(d =>
+      (activeType === 'all' || d.type === activeType) &&
+      d.name.toLowerCase().includes(searchQ) &&
+      !filtered.includes(d)
+    );
+    filtered = [...filtered, ...byName];
+  }
+
+  const metaText = searchQ
+    ? `<span>${filtered.length}</span> resultado${filtered.length !== 1 ? 's' : ''} para "<span>${searchQ}</span>"`
+    : `<span>${filtered.length}</span> documento${filtered.length !== 1 ? 's' : ''}`;
+
+  const cards = filtered.map((doc, i) => {
+    const matchCount = searchQ ? getMatches(doc, searchQ).length : 0;
+    const snippet = getSnippet(doc.text, searchQ);
+
+    let preview = '';
+    if (doc.type === 'img' && doc.dataUrl) {
+      preview = `<img src="${doc.dataUrl}" alt="${doc.name}" loading="lazy">`;
+    } else if (doc.text) {
+      preview = `<div class="text-preview">${doc.text.slice(0, 300)}</div>`;
+    } else {
+      preview = `<div class="big-icon">${getIcon(doc.type)}</div>`;
+    }
+
+    return `
+    <div class="result-card" onclick="openDoc('${doc.id}')" style="animation-delay:${i*0.04}s">
+      <div class="card-preview">
+        ${preview}
+        <div class="type-badge type-${doc.type}">${doc.type.toUpperCase()}</div>
+      </div>
+      <div class="card-body">
+        <div class="card-name" title="${doc.name}">${doc.name}</div>
+        <div class="card-snippet">${snippet}</div>
+      </div>
+      <div class="card-footer">
+        <span class="card-size">${fmtSize(doc.size)}</span>
+        ${matchCount > 0 ? `<span class="card-matches">${matchCount} coincidencia${matchCount>1?'s':''}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="results-meta">${metaText}</div>
+    ${filtered.length === 0
+      ? `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Sin resultados</div><div class="empty-desc">Intenta con otras palabras</div></div>`
+      : `<div class="results-grid">${cards}</div>`
+    }`;
+}
+
+// --- Modal ---
+function openDoc(id) {
+  const doc = docs.find(d => String(d.id) === String(id));
+  if (!doc) return;
+
+  document.getElementById('modalIcon').textContent = getIcon(doc.type);
+  document.getElementById('modalName').textContent = doc.name;
+  document.getElementById('modalMeta').textContent = `${doc.type.toUpperCase()} · ${fmtSize(doc.size)}`;
+
+  const body = document.getElementById('modalBody');
+
+  if (doc.type === 'img' && doc.dataUrl) {
+    body.innerHTML = `<img src="${doc.dataUrl}" alt="${doc.name}" style="max-width:100%;border-radius:8px;">`;
+  } else if (doc.text) {
+    const highlighted = searchQ
+      ? doc.text.replace(new RegExp(`(${escRe(searchQ)})`, 'gi'), '<mark style="background:rgba(192,57,43,0.15);color:var(--accent);border-radius:2px;padding:0 2px">$1</mark>')
+      : doc.text;
+    body.innerHTML = `<div class="modal-content-text">${highlighted}</div>`;
+  } else {
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">No hay vista previa disponible</div>`;
+  }
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+function maybeCloseModal(e) { if (e.target === document.getElementById('modalOverlay')) closeModal(); }
+
+// --- AI ---
+async function askAI() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q || docs.length === 0) {
+    document.getElementById('searchInput').focus();
+    return;
+  }
+
+  const btn = document.getElementById('aiBtn');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  const aiBox = document.getElementById('aiBox');
+  const aiText = document.getElementById('aiBoxText');
+  aiBox.style.display = 'block';
+  aiText.textContent = 'Analizando documentos...';
+
+  // Gather relevant content
+  const relevant = docs
+    .filter(d => d.text.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 5)
+    .map(d => `[${d.name}]\n${d.text.slice(0, 600)}`)
+    .join('\n\n---\n\n');
+
+  const prompt = `Eres un asistente técnico ferroviario experto. El usuario busca información sobre: "${q}".
+
+Aquí está el contenido relevante encontrado en los documentos:
+
+${relevant || 'No se encontró contenido específico, pero hay ' + docs.length + ' documentos cargados.'}
+
+Proporciona un resumen claro y útil en español de lo que encontraste sobre "${q}". Destaca valores, normativas o procedimientos clave. Máximo 120 palabras. Sé directo y técnico.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await response.json();
+    aiText.textContent = data.content?.map(b => b.text || '').join('') || 'Sin respuesta.';
+  } catch(e) {
+    aiText.textContent = 'Error al conectar con la IA.';
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '◆ IA';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+});
+
+// PWA Manifest injection
+const manifestData = {
+  name: "FerroBase — Buscador Ferroviario",
+  short_name: "FerroBase",
+  description: "Buscador técnico ferroviario",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#1a1614",
+  theme_color: "#1a1614",
+  orientation: "any",
+  icons: [
+    { src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF8WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuMWI2NWE3OWI0LCAyMDIyLzA2LzEzLTIyOjAxOjAxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIiB4bWxuczpzdEV2dD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL3NUeXBlL1Jlc291cmNlRXZlbnQjIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjMuNSAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjItMTAtMTlUMTA6NTg6MDkrMDI6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjItMTAtMTlUMTA6NTg6MDkrMDI6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIyLTEwLTE5VDEwOjU4OjA5KzAyOjAwIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOmZhNDFkNDYxLTkxMzYtNGE0NS1hMmNmLTljYTY5YmY1NTVkZSIgeG1wTU06RG9jdW1lbnRJRD0iYWRvYmU6ZG9jaWQ6cGhvdG9zaG9wOjZkNmM0NjJjLWEzODYtYWM0Yy1iNmJlLTRhNzI5OGY5MzU1ZiIgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOjQ0ZWZkMjJmLTc1NzEtNGQ4ZS04Zjk4LTI4YmI2ZDg0NDc3MiIgZGM6Zm9ybWF0PSJpbWFnZS9wbmciIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjQ0ZWZkMjJmLTc1NzEtNGQ4ZS04Zjk4LTI4YmI2ZDg0NDc3MiIgc3RFdnQ6d2hlbj0iMjAyMi0xMC0xOVQxMDo1ODowOSswMjowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDIzLjUgKE1hY2ludG9zaCkiLz4gPHJkZjpsaSBzdEV2dDphY3Rpb249InNhdmVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOmZhNDFkNDYxLTkxMzYtNGE0NS1hMmNmLTljYTY5YmY1NTVkZSIgc3RFdnQ6d2hlbj0iMjAyMi0xMC0xOVQxMDo1ODowOSswMjowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDIzLjUgKE1hY2ludG9zaCkiIHN0RXZ0OmNoYW5nZWQ9Ii8iLz4gPC9yZGY6U2VxPiA8L3htcE1NOkhpc3Rvcnk+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+", sizes: "192x192", type: "image/png" }
+  ]
+};
+try {
+  const blob = new Blob([JSON.stringify(manifestData)], {type:'application/json'});
+  const manifestURL = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = manifestURL;
+  document.head.appendChild(link);
+} catch(e) {}
+
+// Install prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.getElementById('installBanner');
+  if (banner) banner.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  const banner = document.getElementById('installBanner');
+  if (banner) banner.style.display = 'none';
+});
+</script>
+<!-- Install Banner -->
+<div id="installBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1614;border-top:1px solid #333;padding:14px 20px;z-index:300;align-items:center;gap:14px;box-shadow:0 -4px 24px rgba(0,0,0,0.4);">
+  <span style="font-size:24px">🚆</span>
+  <div style="flex:1;min-width:0">
+    <div style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;color:#f5f0e8">Instalar FerroBase</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6b6560;margin-top:2px">Accede desde tu pantalla de inicio</div>
+  </div>
+  <button onclick="installApp()" style="background:#c0392b;color:white;border:none;border-radius:8px;padding:10px 18px;font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Instalar</button>
+  <button onclick="document.getElementById('installBanner').style.display='none'" style="background:rgba(255,255,255,0.07);color:#a09890;border:none;border-radius:8px;padding:10px 14px;font-size:13px;cursor:pointer;">✕</button>
+</div>
+
+<script>
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+  }
+}
+</script>
+
+</body>
+</html>
